@@ -1,0 +1,31 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "query-expansion"
+version = "0.1.0"
+description = "Research-oriented query expansion training with pluggable data and objectives"
+requires-python = ">=3.11"
+dependencies = ["torch>=2.6,<3", "numpy>=1.24", "PyYAML>=6,<7"]
+
+[project.optional-dependencies]
+hf = ["transformers>=5.2,<6", "accelerate>=1,<2", "safetensors>=0.4"]
+dev = ["pytest>=8,<10", "ruff>=0.11"]
+
+[project.scripts]
+qe-train = "query_expansion.train:main"
+qe-evaluate = "query_expansion.evaluate:main"
+qe-export = "query_expansion.export:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F", "I"]
