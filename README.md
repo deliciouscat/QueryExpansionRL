@@ -268,9 +268,39 @@ Pod를 다시 만들 때 동일 Network Volume·이미지·lock 파일을 사용
 
 저장소는 프로젝트를 재구축하는 도중이며, 현재 파일 일부만 남아 있다. 아래의 실행 예시와 설계는 완성되거나 현재 동작한다고 주장하는 구현 목록이 아니라 재구축 목표다. 실제 파일과 일치하는지는 구현이 복원된 뒤 확인한다.
 
-학습 진입점의 작성 형태는 [`CODE_INTERFACE.md`](CODE_INTERFACE.md)를 기준으로 한다. 실험별 `train/<훈련id>.py`가 데이터 스트림, 모델(Agents), 보상(Rewards)을 가져와 조립하고, 학습 루프와 forward/loss 흐름을 읽을 수 있게 둔다. 데이터별 전략 전처리는 data loader 쪽에서 제공하고, 준비되지 않은 조합은 오류를 낸다. `utils.backward.gradient`는 의사코드에서 보이는 것처럼 zero-grad, backward, optimizer update를 공통 처리하는 decorator다. 프로젝트의 gradient accumulation과 LoRA/상위 레이어용 두 optimizer는 이 decorator의 내부 동작으로 지원하되, 실험 진입점의 조립 및 학습 흐름은 유지한다. `src/query_expansion/`와 `qe-train` 예시는 현재 재구축 목표로 확정된 구조가 아니며, 구현 기준을 정할 때 CODE_INTERFACE와 대조해야 한다.
+### 디렉터리별 담당 구조
 
-첫 GPU milestone은 **A5000 한 장에서 한·영 데이터로 SFT → RL → 전체 corpus 평가 → 저장·재개를 끝까지 통과**하는 것이다. 협업 경계와 세부 디렉터리는 재구축 중인 저장소에 실제 구조가 생긴 뒤 그 구조에 맞춰 문서화한다.
+모델 훈련 설계에 참여하는 각 전문가는 **자신이 담당하는 모듈 디렉터리 하나만 수정해도 맡은 기능을 구현하고 개선할 수 있도록** 모듈 경계와 인터페이스를 설계한다. 다른 모듈과의 연결은 공개 API와 데이터 형식으로 맞추며, 이 경계가 바뀌면 통합 담당자가 조율한다. 별도 공용 계약 디렉터리를 두지 않고 각 모듈의 공개 API 정의를 해당 모듈 안에 둔다.
+
+```text
+train/                              # 실험 통합 담당자: 조립용 entrypoint
+  <훈련id>.py
+src/query_expansion/
+  data_loader/                      # 데이터 전문가
+  agents/                           # 모델·정책 전문가
+  rewards/                          # 목적함수·보상 전문가
+  retriever/                        # 검색 전문가
+  utils/                            # 학습 기반·체크포인트 전문가
+  evaluation/                       # 평가 전문가
+```
+
+| 디렉터리 | 단일 담당 범위 | 공개 책임 |
+|---|---|---|
+| `src/query_expansion/data_loader/` | 데이터 전문가 | `DatasetStream`, 데이터 adapter, 전략별 전처리, batch 형식 |
+| `src/query_expansion/agents/` | 모델·정책 전문가 | `Agents`, 모델 구성·생성·학습 파라미터 선택 |
+| `src/query_expansion/rewards/` | 목적함수·보상 전문가 | `Rewards`, 목적함수 registry와 보상 계산 |
+| `src/query_expansion/retriever/` | 검색 전문가 | retriever 인터페이스, BM25 인덱스·검색 결과 |
+| `src/query_expansion/utils/` | 학습 기반 전문가 | `utils.backward.gradient`, optimizer 갱신·저장·재개 |
+| `src/query_expansion/evaluation/` | 평가 전문가 | retrieval metric, 집계와 평가 출력 |
+| `train/` | 실험 통합 담당자 | 모듈 초기화·연결, 실험별 학습 절차와 설정 |
+
+학습 entrypoint 구조는 [`CODE_INTERFACE.md`](CODE_INTERFACE.md)를 따른다. `train/<훈련id>.py`는 `DatasetStream`, `Agents`, `Rewards` 등 필요한 구성 요소를 가져와 연결하고, 학습 루프와 forward/loss 흐름을 읽을 수 있게 둔다. 학습 알고리즘의 조립 책임은 entrypoint에 남기며, 공통 backward/update 처리는 `utils.backward.gradient` decorator가 맡는다. gradient accumulation과 LoRA·상위 레이어용 복수 optimizer도 이 기반 모듈이 처리한다.
+
+의존 관계는 `train → 각 모듈`, `rewards → retriever의 공개 인터페이스`로 제한한다. 보상 모듈은 검색 구현 세부사항에 의존하지 않고 entrypoint가 주입한 retriever 인터페이스를 사용한다. 데이터·모델·검색 모듈은 서로의 내부 파일을 직접 수정하거나 import하지 않는다. 각 전문가는 자기 모듈 디렉터리 안에서 구현과 그 모듈의 공개 API 정의를 함께 관리하고, 다른 모듈 변경이 필요하면 통합 담당자에게 인터페이스 변경을 제안한다.
+
+이 구조는 현재 동작하는 구현 목록이 아니라 재구축을 위한 scaffold다. 각 디렉터리의 `README.md`는 담당 범위와 경계만 설명하며, 실제 구현 API와 파일은 해당 모듈 작업에서 추가한다.
+
+첫 GPU milestone은 **A5000 한 장에서 한·영 데이터로 SFT → RL → 전체 corpus 평가 → 저장·재개를 끝까지 통과**하는 것이다.
 
 ## 9. 참고 자료
 
