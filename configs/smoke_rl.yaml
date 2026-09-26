@@ -1,0 +1,27 @@
+strategy: rl
+seed: 17
+num_threads: 1
+output_dir: runs/smoke_rl
+model:
+  backend: tiny
+  width: 16
+  rank: 2
+  alpha: 4
+  max_prompt_tokens: 256
+  max_new_tokens: 64
+data:
+  adapter: synthetic
+group_size: 4
+reward:
+  negatives: 255
+optimizer:
+  lora_lr: 0.001
+  upper_lr: 0.001
+training:
+  epochs: 2
+  max_steps: 2
+  batch_size: 1
+  accumulation_steps: 4
+  eval_every: 2
+  save_every: 2
+  max_seconds: 3600

@@ -19,7 +19,8 @@ qe-evaluate = "query_expansion.evaluate:main"
 qe-export = "query_expansion.export:main"
 
 [tool.setuptools.packages.find]
-where = ["src"]
+where = ["src", "."]
+include = ["query_expansion*", "train"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

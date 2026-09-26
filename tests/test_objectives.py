@@ -3,7 +3,7 @@ import math
 import pytest
 import torch
 
-from query_expansion.criterion import dpo_loss, group_advantages, sequence_log_probs, sft_loss
+from query_expansion.rewards import Rewards, group_advantages, sequence_log_probs, sft_loss
 
 
 def test_causal_shift_and_completion_only():
@@ -20,21 +20,17 @@ def test_causal_shift_and_completion_only():
     assert logps.item() == pytest.approx(-math.log(3))
 
 
-def test_empty_completion_rejected():
+def test_empty_completion_and_unsupported_strategy():
     with pytest.raises(ValueError, match="completion"):
         sft_loss(torch.zeros(1, 3, 4), torch.full((1, 3), -100))
+    with pytest.raises(ValueError, match="available"):
+        Rewards("dpo")
 
 
-def test_dpo_reference_and_gradient_direction():
-    chosen = torch.tensor([-2.0], requires_grad=True)
-    rejected = torch.tensor([-4.0], requires_grad=True)
-    rc, rr = chosen.detach().clone(), rejected.detach().clone()
-    loss = dpo_loss(chosen, rejected, rc, rr)
-    assert loss.item() == pytest.approx(math.log(2))
-    loss.backward()
-    assert chosen.grad.item() < 0 < rejected.grad.item()
-
-
-def test_advantage_constant_and_population_std():
-    assert torch.equal(group_advantages(torch.ones(4)), torch.zeros(4))
-    assert torch.allclose(group_advantages(torch.tensor([0.0, 2.0])), torch.tensor([-1.0, 1.0]))
+def test_population_advantage_and_detached_policy_gradient():
+    assert torch.equal(group_advantages([1, 1, 1, 1]), torch.zeros(4))
+    assert torch.allclose(group_advantages([0, 2]), torch.tensor([-1.0, 1.0]))
+    logp = torch.tensor(-2.0, requires_grad=True)
+    advantage = torch.tensor(1.0, requires_grad=True)
+    Rewards("rl")(logp, advantage).backward()
+    assert logp.grad == -1 and advantage.grad is None

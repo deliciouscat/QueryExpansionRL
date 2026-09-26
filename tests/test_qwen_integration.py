@@ -3,12 +3,10 @@
 import pytest
 import torch
 
-from query_expansion.contracts import Batch
-from query_expansion.criterion import sft_loss
-from query_expansion.models import build_model, make_optimizers
-from query_expansion.models.tiny import ByteTokenizer
-from query_expansion.strategies import SFT
-from query_expansion.utils.trainer import Trainer
+from query_expansion.agents import Agents
+from query_expansion.agents.tiny import ByteTokenizer
+from query_expansion.rewards import sft_loss
+from query_expansion.utils.backward import GradientEngine, gradient, make_optimizers
 
 
 def test_multimodal_checkpoint_text_loading_hybrid_backward(tmp_path, monkeypatch):
@@ -53,27 +51,40 @@ def test_multimodal_checkpoint_text_loading_hybrid_backward(tmp_path, monkeypatc
     monkeypatch.setattr(
         transformers.AutoTokenizer, "from_pretrained", lambda *a, **kw: ByteTokenizer()
     )
-    bundle = build_model(
-        {
-            "backend": "qwen",
-            "name": str(tmp_path),
-            "revision": "0" * 40,
-            "rank": 2,
-            "alpha": 4,
-            "gradient_checkpointing": True,
-        }
+    agent = Agents(
+        backend="qwen",
+        name=str(tmp_path),
+        revision="0" * 40,
+        rank=2,
+        alpha=4,
+        gradient_checkpointing=True,
     )
-    assert torch.equal(expected, bundle.model.model.layers[0].mlp.up_proj.base.weight)
-    assert bundle.model.lm_head.weight is bundle.model.model.embed_tokens.weight
-    assert not bundle.model.lm_head.weight.requires_grad
-    optimizers = make_optimizers(bundle.groups, {"lora_lr": 0.01, "upper_lr": 0.01})
-    trainer = Trainer(bundle.model, optimizers)
+    assert torch.equal(expected, agent.model.model.layers[0].mlp.up_proj.base.weight)
+    assert agent.model.lm_head.weight is agent.model.model.embed_tokens.weight
+    assert not agent.model.lm_head.weight.requires_grad
+    engine = GradientEngine(agent.model, make_optimizers(agent.groups, lora_lr=0.01, upper_lr=0.01))
     ids = torch.tensor([[2, 3, 4, 5, 6, 1]])
     labels = ids.clone()
     labels[:, :3] = -100
-    metrics = trainer.update(
-        [Batch({"input_ids": ids, "attention_mask": torch.ones_like(ids)}, labels, 1)],
-        SFT(sft_loss),
+    before = {n: p.detach().clone() for n, p in agent.model.named_parameters()}
+
+    @gradient(engine)
+    def forward():
+        return sft_loss(agent({"input_ids": ids, "attention_mask": torch.ones_like(ids)}), labels)
+
+    with engine.window(1):
+        forward()
+    assert engine.global_step == 1
+    assert any(
+        not torch.equal(before[n], p) for n, p in agent.model.named_parameters() if "lora_B" in n
     )
-    assert metrics["updated"] == 1
-    assert torch.isfinite(torch.tensor(metrics["loss"]))
+    assert any(
+        not torch.equal(before[n], p)
+        for n, p in agent.model.named_parameters()
+        if n.startswith("model.layers.12.")
+    )
+    assert all(
+        torch.equal(before[n], p) for n, p in agent.model.named_parameters() if not p.requires_grad
+    )
+    completion = agent.generate("car", "en")
+    assert 1 <= len(completion.tokens) <= 64

@@ -1,0 +1,40 @@
+# Normalize licensed, document-linked data first. Run the GPU smoke before a long job.
+strategy: rl
+seed: 17
+output_dir: ${QE_ROOT}/runs/qwen_rl
+provenance:
+  image_digest: ${QE_IMAGE_DIGEST}
+  data: ${QE_DATA_REVISION_AND_LICENSE}
+model:
+  backend: qwen
+  name: Qwen/Qwen3.5-2B-Base
+  revision: ${QE_MODEL_REVISION}
+  device: cuda
+  dtype: bfloat16
+  rank: 16
+  alpha: 32
+  gradient_checkpointing: true
+  max_prompt_tokens: 256
+  max_new_tokens: 64
+data:
+  adapter: jsonl
+  queries: ${QE_ROOT}/data/processed/queries.jsonl
+  corpus: ${QE_ROOT}/data/processed/corpus.jsonl
+  qrels: ${QE_ROOT}/data/processed/qrels.jsonl
+optimizer:
+  lora_lr: 0.00001
+  upper_lr: 0.000001
+  weight_decay: 0.01
+training:
+  epochs: 3
+  max_steps: 1000
+  batch_size: 1
+  accumulation_steps: 4
+  eval_every: 100
+  save_every: 100
+  save_seconds: 600
+  max_seconds: 3600
+
+group_size: 4
+reward:
+  negatives: 255
