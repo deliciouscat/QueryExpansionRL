@@ -264,24 +264,13 @@ Pod를 다시 만들 때 동일 Network Volume·이미지·lock 파일을 사용
 
 배포 산출물은 상위 레이어 변경과 하위 LoRA를 반영한 전체 모델, tokenizer, config, prompt, 후처리 규칙, 평가표다. LoRA 병합 지원 여부를 확인하고 병합 전후 logits 및 고정 질문 출력을 비교한다. CPU 또는 한 GPU에 새로 로드해 검색 결과까지 확인한 뒤 export 완료로 표시한다.
 
-## 8. 구현 현황과 다음 실험
+## 8. 재구축 상태와 다음 실험
 
-패키지 경로는 `src/query_expansion/`이다.
+저장소는 프로젝트를 재구축하는 도중이며, 현재 파일 일부만 남아 있다. 아래의 실행 예시와 설계는 완성되거나 현재 동작한다고 주장하는 구현 목록이 아니라 재구축 목표다. 실제 파일과 일치하는지는 구현이 복원된 뒤 확인한다.
 
-| 영역 | 구현 | 후속 검증/작업 |
-|---|---|---|
-| 공개 학습 인터페이스 | `train.py`: criterion + 간결한 for문 | 실험별 목적함수 |
-| 데이터 | `data_loader/`: JSONL, batching, epoch 재현 | 외부 dataset adapter, 언어 비율 sampler |
-| 학습 방식 | `strategies/`, `criterion/`: SFT/DPO/RL | 품질·다중 seed 실험 |
-| 모델 | `models/`: 하위 LoRA/상위 full tuning | 실제 2B/A5000 메모리·속도 |
-| 검색 | `retriever/`: reference BM25와 reward | 대규모 inverted index |
-| 공통 실행 | `utils/`: 자동 accumulation·두 optimizer·저장·재개 | best/최근 N개 보관, 자동 dev early stopping |
-| 내부 규격 | `contracts/` | 담당자 간 API 호환성 관리 |
-| 평가·내보내기 | `evaluate.py`, `export.py` | macro/언어 가중 집계, bootstrap |
+학습 진입점의 작성 형태는 [`CODE_INTERFACE.md`](CODE_INTERFACE.md)를 기준으로 한다. 실험별 `train/<훈련id>.py`가 데이터 스트림, 모델(Agents), 보상(Rewards)을 가져와 조립하고, 학습 루프와 forward/loss 흐름을 읽을 수 있게 둔다. 데이터별 전략 전처리는 data loader 쪽에서 제공하고, 준비되지 않은 조합은 오류를 낸다. `utils.backward.gradient`는 의사코드에서 보이는 것처럼 zero-grad, backward, optimizer update를 공통 처리하는 decorator다. 프로젝트의 gradient accumulation과 LoRA/상위 레이어용 두 optimizer는 이 decorator의 내부 동작으로 지원하되, 실험 진입점의 조립 및 학습 흐름은 유지한다. `src/query_expansion/`와 `qe-train` 예시는 현재 재구축 목표로 확정된 구조가 아니며, 구현 기준을 정할 때 CODE_INTERFACE와 대조해야 한다.
 
-현재 checkpoint는 임시 파일에서 atomic rename한 `latest.pt` 하나를 유지하며 별도 완료 marker는 없다. 기본 평가는 query 평균이다. SFT 타깃 자동 생성, 14개 후보 데이터셋 adapter, 비용 수집, serving은 후속 작업이다. LoRA는 dense Linear용 자체 구현이다.
-
-첫 GPU milestone은 **A5000 한 장에서 한·영 데이터로 SFT → RL → 전체 corpus 평가 → 저장·재개를 끝까지 통과**하는 것이다. 담당 분야별 작업 경계와 검증은 [협업 구조](docs/COLLABORATION.md)에 정리했다.
+첫 GPU milestone은 **A5000 한 장에서 한·영 데이터로 SFT → RL → 전체 corpus 평가 → 저장·재개를 끝까지 통과**하는 것이다. 협업 경계와 세부 디렉터리는 재구축 중인 저장소에 실제 구조가 생긴 뒤 그 구조에 맞춰 문서화한다.
 
 ## 9. 참고 자료
 

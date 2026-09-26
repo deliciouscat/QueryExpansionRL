@@ -72,7 +72,7 @@ BM25도 rewrite 적용 시 평균이 45.0에서 53~54대까지 상승했다. 즉
 
 ### 금융 도메인 전이
 
-FinAgentBench를 금융 문서·질문·graded relevance 구조로 변환해 평가했다. 예시로 Contriever는 45.5에서 general rewrite 54.5, direct retriever-aware rewrite 56.3으로 개선됐다. BM25도 45.0에서 rewrite 적용 후 53 이상으로 올랐다.
+FinAgentBench를 금융 문서·질문·graded relevance 구조로 변환해 평가했다. Contriever는 nDCG@10 6.43에서 rewrite 적용 후 7.39로, BM25는 8.17에서 9.02로 개선됐다. 앞 절의 45.5, 54.5, 56.3은 RAGBench 결과다.
 
 ## Structural Drift 분석
 
@@ -111,4 +111,3 @@ Contriever에서는 retriever 특화 지시가 높은 성능을 보였고, BM25�
 - multi-turn 실험은 주로 1~2 turn이다.
 - nDCG reward가 최종 생성 답변의 factuality까지 직접 보장하지는 않는다.
 - API 환경·corpus 변화가 있으면 학습된 query dialect가 다시 drift할 수 있다.
-
